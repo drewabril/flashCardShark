@@ -76,7 +76,7 @@ export function useQuiz() {
   const answer = useCallback((chosen: StrategyAction) => {
     setQuizState(prev => {
       if (!prev.currentPrompt || prev.phase !== 'answering') return prev;
-      const { playerCards, dealerUpcard, correctAnswer } = prev.currentPrompt;
+      const { playerCards, correctAnswer } = prev.currentPrompt;
       const isCorrect = chosen === correctAnswer;
       const category = classifyHand(playerCards);
       const { total } = evaluateHand(playerCards);
