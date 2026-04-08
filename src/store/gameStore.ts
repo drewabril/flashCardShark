@@ -137,7 +137,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // Capture strategy feedback before drawing
       const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble);
       const category = classifyHand(hand.cards);
-      const { total: t, isSoft } = evaluateHand(hand.cards);
+      const { total: t } = evaluateHand(hand.cards);
       const feedback = {
         playerAction: 'H' as const,
         correctAction,
@@ -174,7 +174,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble);
       const category = classifyHand(hand.cards);
-      const { total, isSoft } = evaluateHand(hand.cards);
+      const { total } = evaluateHand(hand.cards);
       const feedback = {
         playerAction: 'S' as const,
         correctAction,
