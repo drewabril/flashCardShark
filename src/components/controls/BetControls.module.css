@@ -1,0 +1,94 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 340px;
+}
+
+.chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.chip {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  color: #fff;
+}
+
+.chip:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow: 0 5px 12px rgba(0,0,0,0.4);
+}
+
+.chip:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.chip5   { background: #e53935; }
+.chip10  { background: #1e88e5; }
+.chip25  { background: #43a047; }
+.chip50  { background: #8e24aa; }
+.chip100 { background: #f4511e; }
+
+.betInfo {
+  color: rgba(255,255,255,0.9);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.currentBet {
+  color: #ffd54f;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.dealBtn {
+  padding: 14px 48px;
+  background: #ffd54f;
+  color: #1a1a1a;
+  border: none;
+  border-radius: 12px;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  letter-spacing: 0.02em;
+}
+
+.dealBtn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: scale(1.02);
+}
+
+.dealBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.clearBtn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.7);
+  padding: 6px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.clearBtn:hover {
+  background: rgba(255,255,255,0.08);
+}

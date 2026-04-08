@@ -1,0 +1,33 @@
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.btn {
+  padding: 14px 0;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  min-height: 52px;
+  letter-spacing: 0.03em;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.hit    { background: #43a047; color: #fff; }
+.stand  { background: #e53935; color: #fff; }
+.double { background: #fb8c00; color: #fff; }
+.split  { background: #8e24aa; color: #fff; }

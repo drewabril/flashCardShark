@@ -1,0 +1,85 @@
+.table {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 24px 16px 32px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.dealerArea {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.felt {
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border-radius: 16px;
+  padding: 18px 12px;
+  display: flex;
+  justify-content: center;
+}
+
+.playerArea {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.splitHands {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.resultBanner {
+  font-size: 26px;
+  font-weight: 800;
+  padding: 12px 32px;
+  border-radius: 14px;
+  letter-spacing: 0.04em;
+}
+
+.win       { background: rgba(67, 160, 71, 0.85); color: #fff; }
+.lose      { background: rgba(229, 57, 53, 0.85); color: #fff; }
+.push      { background: rgba(96, 96, 96, 0.85);  color: #fff; }
+.blackjack { background: rgba(255, 213, 79, 0.9); color: #1a1a1a; }
+
+.nextBtn {
+  padding: 14px 44px;
+  background: #ffd54f;
+  color: #1a1a1a;
+  border: none;
+  border-radius: 12px;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.nextBtn:hover { opacity: 0.88; }
+
+.reloadNotice {
+  color: rgba(255,255,255,0.7);
+  font-size: 14px;
+  text-align: center;
+}
+
+.reloadBtn {
+  padding: 10px 24px;
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 6px;
+}

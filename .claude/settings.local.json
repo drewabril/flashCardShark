@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(echo $PATH)",
+      "Read(//Users/drewabril/**)",
+      "Read(//Users/drewabril/.nvm/**)",
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(ssh-keygen -t ed25519 -C \"drewabril@github\" -f ~/.ssh/id_ed25519 -N \"\")"
+    ]
+  }
+}

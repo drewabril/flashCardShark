@@ -1,0 +1,52 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 16px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.verdict {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.verdict.correct { color: #66bb6a; }
+.verdict.wrong   { color: #ef5350; }
+
+.explanation {
+  font-size: 14px;
+  color: rgba(255,255,255,0.75);
+  line-height: 1.6;
+  text-align: center;
+  max-width: 320px;
+}
+
+.nextBtn {
+  padding: 13px 40px;
+  background: #ffd54f;
+  color: #1a1a1a;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.nextBtn:hover { opacity: 0.88; }

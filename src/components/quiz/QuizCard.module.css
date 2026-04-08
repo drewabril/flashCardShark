@@ -1,0 +1,33 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 20px 16px;
+}
+
+.prompt {
+  font-size: 15px;
+  color: rgba(255,255,255,0.7);
+  font-weight: 600;
+  text-align: center;
+}
+
+.hands {
+  display: flex;
+  gap: 40px;
+  justify-content: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.vs {
+  font-size: 13px;
+  color: rgba(255,255,255,0.4);
+  align-self: center;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
