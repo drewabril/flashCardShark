@@ -21,7 +21,7 @@ const RESULT_CLASS: Record<string, string> = {
 };
 
 export function FreePlayTable() {
-  const { state, placeBet, deal, hit, stand, double, split, nextRound, reloadChips } = useGame();
+  const { state, placeBet, deal, hit, stand, double, split, nextRound, rebet, reloadChips } = useGame();
   const { phase, playerHands, dealerCards, chips, currentBet, lastStrategyFeedback, activeHandIndex } = state;
 
   const [showFeedback, setShowFeedback] = useState(false);
@@ -102,6 +102,11 @@ export function FreePlayTable() {
                 Hand {i + 1}: {RESULT_LABEL[hand.result]}
               </div>
             ))
+          )}
+          {currentBet > 0 && chips >= currentBet && (
+            <button className={styles.rebetBtn} onClick={rebet}>
+              Rebet ${currentBet}
+            </button>
           )}
           <button className={styles.nextBtn} onClick={nextRound}>
             Next Hand

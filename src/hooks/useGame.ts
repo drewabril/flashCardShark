@@ -12,6 +12,7 @@ export function useGame() {
     double: () => dispatch({ type: 'DOUBLE' }),
     split: () => dispatch({ type: 'SPLIT' }),
     nextRound: () => dispatch({ type: 'NEXT_ROUND' }),
+    rebet: () => dispatch({ type: 'REBET' }),
     reloadChips: () => dispatch({ type: 'RELOAD_CHIPS' }),
   };
 }

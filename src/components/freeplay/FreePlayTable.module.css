@@ -53,10 +53,10 @@
 .push      { background: rgba(96, 96, 96, 0.85);  color: #fff; }
 .blackjack { background: rgba(255, 213, 79, 0.9); color: #1a1a1a; }
 
-.nextBtn {
+.rebetBtn {
   padding: 14px 44px;
-  background: #ffd54f;
-  color: #1a1a1a;
+  background: #43a047;
+  color: #fff;
   border: none;
   border-radius: 12px;
   font-size: 17px;
@@ -65,7 +65,21 @@
   transition: opacity 0.15s;
 }
 
-.nextBtn:hover { opacity: 0.88; }
+.rebetBtn:hover { opacity: 0.88; }
+
+.nextBtn {
+  padding: 14px 44px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.nextBtn:hover { opacity: 0.75; }
 
 .reloadNotice {
   color: rgba(255,255,255,0.7);

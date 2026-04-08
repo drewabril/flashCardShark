@@ -286,6 +286,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
+    case 'REBET': {
+      if (state.currentBet <= 0 || state.chips < state.currentBet) return state;
+      // Re-use the same bet and go straight to deal
+      const rebetState: GameState = {
+        ...createInitialState(),
+        shoe: shouldReshuffle(state.shoe) ? createShoe() : state.shoe,
+        chips: state.chips,
+        currentBet: state.currentBet,
+      };
+      return gameReducer(rebetState, { type: 'DEAL' });
+    }
+
     case 'NEXT_ROUND': {
       const shoe = shouldReshuffle(state.shoe) ? createShoe() : state.shoe;
       const chips = state.chips <= 0 ? STARTING_CHIPS : state.chips;

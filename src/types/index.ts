@@ -60,6 +60,7 @@ export type GameAction =
   | { type: 'DOUBLE' }
   | { type: 'SPLIT' }
   | { type: 'NEXT_ROUND' }
+  | { type: 'REBET' }
   | { type: 'RELOAD_CHIPS' };
 
 export interface QuizPrompt {
