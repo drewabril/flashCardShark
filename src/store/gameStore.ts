@@ -4,6 +4,7 @@ import { createShoe, drawCard, shouldReshuffle } from '../engine/deck';
 import { evaluateHand, canDouble, canSplit } from '../engine/hand';
 import { playDealerHand } from '../engine/dealer';
 import { getBasicStrategyMove, getExplanation, classifyHand } from '../engine/basicStrategy';
+import { rankToNumber } from '../engine/cards';
 
 const STARTING_CHIPS = 1000;
 
@@ -141,7 +142,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         playerAction: 'H' as const,
         correctAction,
         isCorrect: correctAction === 'H',
-        explanation: getExplanation(correctAction, category, t, isSoft ? t : t),
+        explanation: getExplanation(correctAction, category, t, rankToNumber(dealerUpcard.rank)),
         handCategory: category,
       };
 
@@ -178,7 +179,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         playerAction: 'S' as const,
         correctAction,
         isCorrect: correctAction === 'S',
-        explanation: getExplanation(correctAction, category, isSoft ? total : total, total),
+        explanation: getExplanation(correctAction, category, total, rankToNumber(dealerUpcard.rank)),
         handCategory: category,
       };
 
@@ -204,7 +205,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         playerAction: 'D' as const,
         correctAction,
         isCorrect: correctAction === 'D',
-        explanation: getExplanation(correctAction, category, total, total),
+        explanation: getExplanation(correctAction, category, total, rankToNumber(dealerUpcard.rank)),
         handCategory: category,
       };
 
@@ -248,7 +249,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         playerAction: 'SP' as const,
         correctAction,
         isCorrect: correctAction === 'SP',
-        explanation: getExplanation(correctAction, category, total, total),
+        explanation: getExplanation(correctAction, category, total, rankToNumber(dealerUpcard.rank)),
         handCategory: category,
       };
 
