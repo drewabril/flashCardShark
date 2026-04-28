@@ -1,9 +1,9 @@
 export type Suit = 'S' | 'H' | 'D' | 'C';
 export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A';
-export type StrategyAction = 'H' | 'S' | 'D' | 'SP';
+export type StrategyAction = 'H' | 'S' | 'D' | 'SP' | 'SR';
 export type HandCategory = 'hard' | 'soft' | 'pair';
-export type GamePhase = 'betting' | 'playerTurn' | 'dealerTurn' | 'roundOver' | 'splitTurn';
-export type RoundResult = 'win' | 'lose' | 'push' | 'blackjack' | null;
+export type GamePhase = 'betting' | 'playerTurn' | 'dealerTurn' | 'roundOver' | 'splitTurn' | 'insuranceOffered' | 'intermission';
+export type RoundResult = 'win' | 'lose' | 'push' | 'blackjack' | 'surrender' | null;
 export type AppMode = 'freeplay' | 'quiz';
 
 export interface Card {
@@ -31,6 +31,7 @@ export interface HandState {
   result: RoundResult;
   canDouble: boolean;
   canSplit: boolean;
+  canSurrender: boolean;
 }
 
 export interface StrategyFeedback {
@@ -41,6 +42,11 @@ export interface StrategyFeedback {
   handCategory: HandCategory;
 }
 
+export interface ShoeStats {
+  handsPlayed: number;
+  startingChips: number;
+}
+
 export interface GameState {
   shoe: Shoe;
   playerHands: HandState[];
@@ -49,7 +55,9 @@ export interface GameState {
   phase: GamePhase;
   chips: number;
   currentBet: number;
+  insuranceBet: number;
   lastStrategyFeedback: StrategyFeedback | null;
+  shoeStats: ShoeStats;
 }
 
 export type GameAction =
@@ -59,6 +67,10 @@ export type GameAction =
   | { type: 'STAND' }
   | { type: 'DOUBLE' }
   | { type: 'SPLIT' }
+  | { type: 'SURRENDER' }
+  | { type: 'TAKE_INSURANCE' }
+  | { type: 'DECLINE_INSURANCE' }
+  | { type: 'END_INTERMISSION' }
   | { type: 'NEXT_ROUND' }
   | { type: 'REBET' }
   | { type: 'RELOAD_CHIPS' };

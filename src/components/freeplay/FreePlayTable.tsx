@@ -4,6 +4,8 @@ import { HandDisplay } from '../hand/HandDisplay';
 import { ActionButtons } from '../controls/ActionButtons';
 import { BetControls } from '../controls/BetControls';
 import { StrategyFeedback } from '../feedback/StrategyFeedback';
+import { InsurancePrompt } from './InsurancePrompt';
+import { IntermissionScreen } from './IntermissionScreen';
 import styles from './FreePlayTable.module.css';
 
 const RESULT_LABEL: Record<string, string> = {
@@ -11,6 +13,7 @@ const RESULT_LABEL: Record<string, string> = {
   lose: 'Dealer Wins',
   push: 'Push',
   blackjack: 'Blackjack! 🃏',
+  surrender: 'Surrendered (½ bet returned)',
 };
 
 const RESULT_CLASS: Record<string, string> = {
@@ -18,11 +21,12 @@ const RESULT_CLASS: Record<string, string> = {
   lose: styles.lose,
   push: styles.push,
   blackjack: styles.blackjack,
+  surrender: styles.lose,
 };
 
 export function FreePlayTable() {
-  const { state, placeBet, deal, hit, stand, double, split, nextRound, rebet, reloadChips } = useGame();
-  const { phase, playerHands, dealerCards, chips, currentBet, lastStrategyFeedback, activeHandIndex } = state;
+  const { state, placeBet, deal, hit, stand, double, split, surrender, takeInsurance, declineInsurance, endIntermission, nextRound, rebet, reloadChips } = useGame();
+  const { phase, playerHands, dealerCards, chips, currentBet, lastStrategyFeedback, activeHandIndex, shoeStats } = state;
 
   const [showFeedback, setShowFeedback] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
@@ -141,8 +145,10 @@ export function FreePlayTable() {
           onStand={() => handleAction(stand)}
           onDouble={() => handleAction(double)}
           onSplit={() => handleAction(split)}
+          onSurrender={() => handleAction(surrender)}
           canDouble={activeHand.canDouble}
           canSplit={activeHand.canSplit}
+          canSurrender={activeHand.canSurrender && phase === 'playerTurn'}
         />
       )}
 
@@ -152,6 +158,24 @@ export function FreePlayTable() {
           feedback={lastStrategyFeedback}
           onContinue={handleFeedbackContinue}
           continueLabel={isRoundOver ? 'See Result' : 'Continue'}
+        />
+      )}
+
+      {/* Insurance prompt */}
+      {phase === 'insuranceOffered' && (
+        <InsurancePrompt
+          bet={currentBet}
+          onTake={takeInsurance}
+          onDecline={declineInsurance}
+        />
+      )}
+
+      {/* Shoe intermission */}
+      {phase === 'intermission' && (
+        <IntermissionScreen
+          handsPlayed={shoeStats.handsPlayed}
+          netChips={chips - shoeStats.startingChips}
+          onContinue={endIntermission}
         />
       )}
     </div>

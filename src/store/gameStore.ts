@@ -25,13 +25,14 @@ function saveChips(chips: number): void {
   }
 }
 
-function makeHandState(cards: HandState['cards'], bet: number): HandState {
+function makeHandState(cards: HandState['cards'], bet: number, canSurrender = false): HandState {
   return {
     cards,
     bet,
     result: null,
     canDouble: canDouble(cards),
     canSplit: canSplit(cards),
+    canSurrender,
   };
 }
 
@@ -52,15 +53,18 @@ function calcPayout(result: RoundResult, bet: number): number {
 }
 
 export function createInitialState(): GameState {
+  const chips = loadChips();
   return {
     shoe: createShoe(),
     playerHands: [],
     activeHandIndex: 0,
     dealerCards: [],
     phase: 'betting',
-    chips: loadChips(),
+    chips,
     currentBet: 0,
+    insuranceBet: 0,
     lastStrategyFeedback: null,
+    shoeStats: { handsPlayed: 0, startingChips: chips },
   };
 }
 
@@ -74,11 +78,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'DEAL': {
       if (state.currentBet <= 0) return state;
-      let shoe = shouldReshuffle(state.shoe) ? createShoe() : state.shoe;
 
       // Draw: p1, d1, p2, d2 (dealer second card face down)
       const draws: Array<{ card: ReturnType<typeof drawCard>['card']; shoe: ReturnType<typeof drawCard>['shoe'] }> = [];
-      let s = shoe;
+      let s = state.shoe;
       for (let i = 0; i < 3; i++) {
         const r = drawCard(s);
         draws.push(r);
@@ -90,7 +93,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const playerCards = [draws[0].card, draws[2].card];
       const dealerCards = [draws[1].card, dealerHoleResult.card];
 
-      const hand = makeHandState(playerCards, state.currentBet);
+      const hand = makeHandState(playerCards, state.currentBet, true);
       const chips = state.chips - state.currentBet;
       saveChips(chips);
 
@@ -107,14 +110,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         return {
           ...state,
           shoe: s,
-          playerHands: [{ ...hand, result, canDouble: false, canSplit: false }],
+          playerHands: [{ ...hand, result, canDouble: false, canSplit: false, canSurrender: false }],
           dealerCards: revealedDealer,
           activeHandIndex: 0,
           phase: 'roundOver',
           chips: finalChips,
           lastStrategyFeedback: null,
+          shoeStats: { ...state.shoeStats, handsPlayed: state.shoeStats.handsPlayed + 1 },
         };
       }
+
+      // Offer insurance if dealer upcard is Ace (and player doesn't have BJ — handled above)
+      const insuranceOffered = dealerCards[0].rank === 'A';
 
       return {
         ...state,
@@ -122,8 +129,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         playerHands: [hand],
         dealerCards,
         activeHandIndex: 0,
-        phase: 'playerTurn',
+        phase: insuranceOffered ? 'insuranceOffered' : 'playerTurn',
         chips,
+        insuranceBet: 0,
         lastStrategyFeedback: null,
       };
     }
@@ -135,7 +143,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const dealerUpcard = state.dealerCards[0];
 
       // Capture strategy feedback before drawing
-      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble);
+      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble, hand.canSurrender);
       const category = classifyHand(hand.cards);
       const { total: t } = evaluateHand(hand.cards);
       const feedback = {
@@ -154,6 +162,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         cards: newCards,
         canDouble: false,
         canSplit: false,
+        canSurrender: false,
         result: isBust ? 'lose' : null,
       };
       const updatedHands = state.playerHands.map((h, i) => i === handIdx ? updatedHand : h);
@@ -172,7 +181,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const hand = state.playerHands[handIdx];
       const dealerUpcard = state.dealerCards[0];
 
-      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble);
+      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble, hand.canSurrender);
       const category = classifyHand(hand.cards);
       const { total } = evaluateHand(hand.cards);
       const feedback = {
@@ -198,7 +207,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!hand.canDouble) return state;
       const dealerUpcard = state.dealerCards[0];
 
-      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, true);
+      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, true, hand.canSurrender);
       const category = classifyHand(hand.cards);
       const { total } = evaluateHand(hand.cards);
       const feedback = {
@@ -223,6 +232,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         bet: hand.bet + extraBet,
         canDouble: false,
         canSplit: false,
+        canSurrender: false,
         result: isBust ? 'lose' : null,
       };
       const updatedHands = state.playerHands.map((h, i) => i === handIdx ? updatedHand : h);
@@ -242,7 +252,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!hand.canSplit) return state;
       const dealerUpcard = state.dealerCards[0];
 
-      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble);
+      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble, hand.canSurrender);
       const category = classifyHand(hand.cards);
       const { total } = evaluateHand(hand.cards);
       const feedback = {
@@ -286,27 +296,106 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
+    case 'TAKE_INSURANCE': {
+      if (state.phase !== 'insuranceOffered') return state;
+      const insuranceBet = Math.floor(state.currentBet / 2);
+      if (insuranceBet > state.chips) return resolveInsurance(state); // can't afford → treat as decline
+      const chips = state.chips - insuranceBet;
+      saveChips(chips);
+      return resolveInsurance({ ...state, chips, insuranceBet });
+    }
+
+    case 'DECLINE_INSURANCE': {
+      if (state.phase !== 'insuranceOffered') return state;
+      return resolveInsurance({ ...state, insuranceBet: 0 });
+    }
+
+    case 'END_INTERMISSION': {
+      if (state.phase !== 'intermission') return state;
+      const chips = state.chips <= 0 ? STARTING_CHIPS : state.chips;
+      saveChips(chips);
+      return {
+        ...createInitialState(),
+        shoe: createShoe(),
+        chips,
+        currentBet: state.currentBet,
+        shoeStats: { handsPlayed: 0, startingChips: chips },
+      };
+    }
+
+    case 'SURRENDER': {
+      if (state.phase !== 'playerTurn') return state;
+      const handIdx = state.activeHandIndex;
+      const hand = state.playerHands[handIdx];
+      if (!hand.canSurrender) return state;
+      const dealerUpcard = state.dealerCards[0];
+
+      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble, true);
+      const category = classifyHand(hand.cards);
+      const { total } = evaluateHand(hand.cards);
+      const feedback = {
+        playerAction: 'SR' as const,
+        correctAction,
+        isCorrect: correctAction === 'SR',
+        explanation: getExplanation(correctAction, category, total, rankToNumber(dealerUpcard.rank)),
+        handCategory: category,
+      };
+
+      // Return half the bet, end the round (no dealer play needed for single surrendered hand)
+      const refund = Math.floor(hand.bet / 2);
+      const chips = state.chips + refund;
+      saveChips(chips);
+
+      const updatedHand: HandState = {
+        ...hand,
+        canDouble: false,
+        canSplit: false,
+        canSurrender: false,
+        result: 'surrender',
+      };
+
+      // Reveal dealer hole card so the result screen shows what would have been
+      const revealedDealer = state.dealerCards.map(c => ({ ...c, faceDown: false }));
+
+      return {
+        ...state,
+        chips,
+        playerHands: [updatedHand],
+        dealerCards: revealedDealer,
+        phase: 'roundOver',
+        lastStrategyFeedback: feedback,
+        shoeStats: { ...state.shoeStats, handsPlayed: state.shoeStats.handsPlayed + 1 },
+      };
+    }
+
     case 'REBET': {
       if (state.currentBet <= 0 || state.chips < state.currentBet) return state;
+      if (shouldReshuffle(state.shoe)) {
+        return { ...state, phase: 'intermission' };
+      }
       // Re-use the same bet and go straight to deal
       const rebetState: GameState = {
         ...createInitialState(),
-        shoe: shouldReshuffle(state.shoe) ? createShoe() : state.shoe,
+        shoe: state.shoe,
         chips: state.chips,
         currentBet: state.currentBet,
+        shoeStats: state.shoeStats,
       };
       return gameReducer(rebetState, { type: 'DEAL' });
     }
 
     case 'NEXT_ROUND': {
-      const shoe = shouldReshuffle(state.shoe) ? createShoe() : state.shoe;
+      if (shouldReshuffle(state.shoe)) {
+        return { ...state, phase: 'intermission' };
+      }
       const chips = state.chips <= 0 ? STARTING_CHIPS : state.chips;
       saveChips(chips);
       return {
         ...createInitialState(),
-        shoe,
+        shoe: state.shoe,
         chips,
         currentBet: state.currentBet,
+        shoeStats: state.shoeStats,
       };
     }
 
@@ -318,6 +407,37 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     default:
       return state;
   }
+}
+
+function resolveInsurance(state: GameState): GameState {
+  const revealed = state.dealerCards.map(c => ({ ...c, faceDown: false }));
+  const { isBlackjack: dealerBJ } = evaluateHand(revealed);
+
+  if (dealerBJ) {
+    // Original bet lost; insurance pays 2:1 (3x the side bet returned)
+    const insurancePayout = state.insuranceBet > 0 ? state.insuranceBet * 3 : 0;
+    const finalChips = state.chips + insurancePayout;
+    saveChips(finalChips);
+    const hand = state.playerHands[0];
+    const updatedHand: HandState = {
+      ...hand,
+      result: 'lose',
+      canDouble: false,
+      canSplit: false,
+      canSurrender: false,
+    };
+    return {
+      ...state,
+      chips: finalChips,
+      dealerCards: revealed,
+      playerHands: [updatedHand],
+      phase: 'roundOver',
+      shoeStats: { ...state.shoeStats, handsPlayed: state.shoeStats.handsPlayed + 1 },
+    };
+  }
+
+  // No dealer BJ — keep hole card hidden, continue normal play
+  return { ...state, phase: 'playerTurn' };
 }
 
 function advanceAfterBust(
@@ -365,6 +485,7 @@ function runDealerPhase(
     phase: 'roundOver',
     chips,
     lastStrategyFeedback: feedback,
+    shoeStats: { ...state.shoeStats, handsPlayed: state.shoeStats.handsPlayed + 1 },
   };
 }
 

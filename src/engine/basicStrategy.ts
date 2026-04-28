@@ -2,10 +2,17 @@ import type { Card, Rank, StrategyAction, HandCategory } from '../types';
 import { rankToNumber } from './cards';
 import { evaluateHand, canDouble as handCanDouble } from './hand';
 
-// 6-deck, dealer stands soft 17, double after split allowed
+// 6-deck, dealer stands soft 17, double after split allowed, late surrender allowed
 // Dealer upcard index: 2–10, 11=Ace
 
 type DealerMap = Record<number, StrategyAction>;
+
+// Late surrender: only on first action of an unsplit hand (2 cards)
+// Hard 16 vs 9, 10, A | Hard 15 vs 10
+const SURRENDER_HARD: Record<number, Record<number, true>> = {
+  15: { 10: true },
+  16: { 9: true, 10: true, 11: true },
+};
 
 const HARD: Record<number, DealerMap> = {
    5: { 2:'H', 3:'H', 4:'H', 5:'H', 6:'H', 7:'H', 8:'H', 9:'H', 10:'H', 11:'H' },
@@ -60,11 +67,17 @@ export function classifyHand(cards: Card[]): HandCategory {
 export function getBasicStrategyMove(
   playerCards: Card[],
   dealerUpcard: Card,
-  playerCanDouble = true
+  playerCanDouble = true,
+  playerCanSurrender = false
 ): StrategyAction {
   const { total, isPair, isSoft } = evaluateHand(playerCards);
   const dealerNum = rankToNumber(dealerUpcard.rank);
   const doubleAllowed = playerCanDouble && handCanDouble(playerCards);
+
+  // Surrender takes priority on hard totals when allowed (2-card unsplit hand)
+  if (playerCanSurrender && !isPair && !isSoft && SURRENDER_HARD[total]?.[dealerNum]) {
+    return 'SR';
+  }
 
   let action: StrategyAction;
 
@@ -99,8 +112,13 @@ export function getExplanation(
     S: 'Stand',
     D: 'Double Down',
     SP: 'Split',
+    SR: 'Surrender',
   };
   const act = actionLabel[correctAction];
+
+  if (correctAction === 'SR') {
+    return `${act}: Hard ${total} vs dealer ${dealerLabel} — surrender saves half your bet vs near-certain loss.`;
+  }
 
   if (category === 'pair') {
     if (correctAction === 'SP') return `${act}: Always split this pair against dealer ${dealerLabel}.`;

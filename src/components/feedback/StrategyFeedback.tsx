@@ -6,6 +6,7 @@ const ACTION_LABEL: Record<string, string> = {
   S: 'Stand',
   D: 'Double Down',
   SP: 'Split',
+  SR: 'Surrender',
 };
 
 interface Props {

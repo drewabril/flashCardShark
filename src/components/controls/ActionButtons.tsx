@@ -5,12 +5,14 @@ interface Props {
   onStand: () => void;
   onDouble: () => void;
   onSplit: () => void;
+  onSurrender: () => void;
   canDouble: boolean;
   canSplit: boolean;
+  canSurrender: boolean;
   disabled?: boolean;
 }
 
-export function ActionButtons({ onHit, onStand, onDouble, onSplit, canDouble, canSplit, disabled }: Props) {
+export function ActionButtons({ onHit, onStand, onDouble, onSplit, onSurrender, canDouble, canSplit, canSurrender, disabled }: Props) {
   return (
     <div className={styles.grid}>
       <button className={`${styles.btn} ${styles.hit}`} onClick={onHit} disabled={disabled} aria-label="Hit">
@@ -25,6 +27,11 @@ export function ActionButtons({ onHit, onStand, onDouble, onSplit, canDouble, ca
       <button className={`${styles.btn} ${styles.split}`} onClick={onSplit} disabled={disabled || !canSplit} aria-label="Split">
         Split
       </button>
+      {canSurrender && (
+        <button className={`${styles.btn} ${styles.surrender} ${styles.wide}`} onClick={onSurrender} disabled={disabled} aria-label="Surrender">
+          Surrender
+        </button>
+      )}
     </div>
   );
 }
