@@ -1,12 +1,12 @@
 import type { Card, Shoe } from '../types';
 import { SUITS, RANKS } from './cards';
 
-const NUM_DECKS = 6;
+const DEFAULT_DECKS = 6;
 const RESHUFFLE_THRESHOLD = 0.25;
 
-export function createShoe(): Shoe {
+export function createShoe(numDecks: number = DEFAULT_DECKS): Shoe {
   const cards: Card[] = [];
-  for (let d = 0; d < NUM_DECKS; d++) {
+  for (let d = 0; d < numDecks; d++) {
     for (const suit of SUITS) {
       for (const rank of RANKS) {
         cards.push({ suit, rank, faceDown: false });

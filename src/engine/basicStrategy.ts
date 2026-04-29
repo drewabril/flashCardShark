@@ -1,4 +1,4 @@
-import type { Card, Rank, StrategyAction, HandCategory } from '../types';
+import type { Card, Rank, StrategyAction, HandCategory, MistakeSituation } from '../types';
 import { rankToNumber } from './cards';
 import { evaluateHand, canDouble as handCanDouble } from './hand';
 
@@ -56,6 +56,34 @@ const PAIRS: Record<Rank, DealerMap> = {
   'Q': { 2:'S',  3:'S',  4:'S',  5:'S',  6:'S',  7:'S',  8:'S',  9:'S',  10:'S',  11:'S'  },
   'K': { 2:'S',  3:'S',  4:'S',  5:'S',  6:'S',  7:'S',  8:'S',  9:'S',  10:'S',  11:'S'  },
 };
+
+/**
+ * Reduce a hand + dealer upcard to a canonical situation used by the mistake tracker.
+ * Pairs key on the rank, soft hands key on the soft total, hard on the hard total.
+ * The dealer rank stores the upcard (face cards normalized to '10').
+ */
+export function cardsToSituation(playerCards: Card[], dealerUpcard: Card): MistakeSituation {
+  const { total, isPair, isSoft } = evaluateHand(playerCards);
+  // Normalize face cards to '10' so J/Q/K all share a row
+  const r = dealerUpcard.rank;
+  const dealerRank: Rank = (r === 'J' || r === 'Q' || r === 'K') ? '10' : r;
+
+  if (isPair && playerCards.length === 2) {
+    return {
+      category: 'pair',
+      totalOrRank: playerCards[0].rank === 'J' || playerCards[0].rank === 'Q' || playerCards[0].rank === 'K'
+        ? '10'
+        : playerCards[0].rank,
+      dealerRank,
+    };
+  }
+  if (isSoft) return { category: 'soft', totalOrRank: String(total), dealerRank };
+  return { category: 'hard', totalOrRank: String(total), dealerRank };
+}
+
+export function situationKey(s: MistakeSituation): string {
+  return `${s.category}:${s.totalOrRank}:${s.dealerRank}`;
+}
 
 export function classifyHand(cards: Card[]): HandCategory {
   const { isPair, isSoft } = evaluateHand(cards);

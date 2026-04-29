@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { QuizState, QuizPrompt, StrategyAction, Card, Rank } from '../types';
 import { createShoe, drawCard } from '../engine/deck';
 import { getBasicStrategyMove, getExplanation, classifyHand } from '../engine/basicStrategy';
@@ -61,17 +61,25 @@ function generatePrompt(): QuizPrompt {
   return { playerCards, dealerUpcard: upcard, correctAnswer };
 }
 
-const initialQuizState: QuizState = {
-  currentPrompt: generatePrompt(),
-  score: 0,
-  streak: 0,
-  totalAnswered: 0,
-  lastResult: null,
-  phase: 'answering',
-};
+/**
+ * @param customGenerator Optional source of prompts (e.g. mistakes-based).
+ *   May return null to signal "no prompt available" (empty mistake bag).
+ *   When null, the quiz state currentPrompt becomes null and the view should
+ *   render an empty state.
+ */
+export function useQuiz(customGenerator?: () => QuizPrompt | null) {
+  // Hold latest generator in a ref so `next()` always uses fresh closure
+  const genRef = useRef<() => QuizPrompt | null>(customGenerator ?? generatePrompt);
+  genRef.current = customGenerator ?? generatePrompt;
 
-export function useQuiz() {
-  const [quizState, setQuizState] = useState<QuizState>(initialQuizState);
+  const [quizState, setQuizState] = useState<QuizState>(() => ({
+    currentPrompt: genRef.current(),
+    score: 0,
+    streak: 0,
+    totalAnswered: 0,
+    lastResult: null,
+    phase: 'answering',
+  }));
 
   const answer = useCallback((chosen: StrategyAction) => {
     setQuizState(prev => {
@@ -97,11 +105,23 @@ export function useQuiz() {
   const next = useCallback(() => {
     setQuizState(prev => ({
       ...prev,
-      currentPrompt: generatePrompt(),
+      currentPrompt: genRef.current(),
       lastResult: null,
       phase: 'answering',
     }));
   }, []);
 
-  return { quizState, answer, next };
+  /** Force a fresh prompt with the current generator. Used when toggling modes. */
+  const reset = useCallback(() => {
+    setQuizState({
+      currentPrompt: genRef.current(),
+      score: 0,
+      streak: 0,
+      totalAnswered: 0,
+      lastResult: null,
+      phase: 'answering',
+    });
+  }, []);
+
+  return { quizState, answer, next, reset };
 }

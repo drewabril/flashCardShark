@@ -1,12 +1,20 @@
-import { createContext, useContext, useReducer } from 'react';
-import type { GameState, GameAction, HandState, RoundResult } from '../types';
+import { createContext, useContext, useEffect, useReducer } from 'react';
+import type { GameState, GameAction, HandState, RoundResult, ActiveRules } from '../types';
 import { createShoe, drawCard, shouldReshuffle } from '../engine/deck';
 import { evaluateHand, canDouble, canSplit } from '../engine/hand';
 import { playDealerHand } from '../engine/dealer';
-import { getBasicStrategyMove, getExplanation, classifyHand } from '../engine/basicStrategy';
+import { getBasicStrategyMove, getExplanation, classifyHand, cardsToSituation } from '../engine/basicStrategy';
 import { rankToNumber } from '../engine/cards';
+import { useSettings } from './settingsStore';
 
 const STARTING_CHIPS = 1000;
+
+const DEFAULT_RULES: ActiveRules = {
+  numDecks: 6,
+  dealerStandsOnSoft17: true,
+  surrenderAllowed: true,
+  doubleAfterSplit: true,
+};
 
 function loadChips(): number {
   try {
@@ -52,10 +60,10 @@ function calcPayout(result: RoundResult, bet: number): number {
   return 0;
 }
 
-export function createInitialState(): GameState {
+export function createInitialState(rules: ActiveRules = DEFAULT_RULES): GameState {
   const chips = loadChips();
   return {
-    shoe: createShoe(),
+    shoe: createShoe(rules.numDecks),
     playerHands: [],
     activeHandIndex: 0,
     dealerCards: [],
@@ -65,6 +73,7 @@ export function createInitialState(): GameState {
     insuranceBet: 0,
     lastStrategyFeedback: null,
     shoeStats: { handsPlayed: 0, startingChips: chips },
+    rules,
   };
 }
 
@@ -93,7 +102,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const playerCards = [draws[0].card, draws[2].card];
       const dealerCards = [draws[1].card, dealerHoleResult.card];
 
-      const hand = makeHandState(playerCards, state.currentBet, true);
+      const hand = makeHandState(playerCards, state.currentBet, state.rules.surrenderAllowed);
       const chips = state.chips - state.currentBet;
       saveChips(chips);
 
@@ -152,6 +161,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         isCorrect: correctAction === 'H',
         explanation: getExplanation(correctAction, category, t, rankToNumber(dealerUpcard.rank)),
         handCategory: category,
+        situation: cardsToSituation(hand.cards, dealerUpcard),
       };
 
       const { card, shoe } = drawCard(state.shoe);
@@ -190,6 +200,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         isCorrect: correctAction === 'S',
         explanation: getExplanation(correctAction, category, total, rankToNumber(dealerUpcard.rank)),
         handCategory: category,
+        situation: cardsToSituation(hand.cards, dealerUpcard),
       };
 
       const nextHandIdx = handIdx + 1;
@@ -216,6 +227,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         isCorrect: correctAction === 'D',
         explanation: getExplanation(correctAction, category, total, rankToNumber(dealerUpcard.rank)),
         handCategory: category,
+        situation: cardsToSituation(hand.cards, dealerUpcard),
       };
 
       // Deduct extra bet
@@ -261,6 +273,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         isCorrect: correctAction === 'SP',
         explanation: getExplanation(correctAction, category, total, rankToNumber(dealerUpcard.rank)),
         handCategory: category,
+        situation: cardsToSituation(hand.cards, dealerUpcard),
       };
 
       // Deduct second bet
@@ -277,6 +290,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const hand1 = makeHandState(hand1Cards, hand.bet);
       const hand2 = makeHandState(hand2Cards, splitBet);
+      // Apply DAS rule: if double-after-split is disabled, both hands cannot double
+      if (!state.rules.doubleAfterSplit) {
+        hand1.canDouble = false;
+        hand2.canDouble = false;
+      }
 
       const newHands = [
         ...state.playerHands.slice(0, handIdx),
@@ -315,8 +333,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const chips = state.chips <= 0 ? STARTING_CHIPS : state.chips;
       saveChips(chips);
       return {
-        ...createInitialState(),
-        shoe: createShoe(),
+        ...createInitialState(state.rules),
         chips,
         currentBet: state.currentBet,
         shoeStats: { handsPlayed: 0, startingChips: chips },
@@ -339,6 +356,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         isCorrect: correctAction === 'SR',
         explanation: getExplanation(correctAction, category, total, rankToNumber(dealerUpcard.rank)),
         handCategory: category,
+        situation: cardsToSituation(hand.cards, dealerUpcard),
       };
 
       // Return half the bet, end the round (no dealer play needed for single surrendered hand)
@@ -370,12 +388,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'REBET': {
       if (state.currentBet <= 0 || state.chips < state.currentBet) return state;
-      if (shouldReshuffle(state.shoe)) {
+      // Force intermission if shoe is depleted or deck count was changed in settings
+      const decksChanged = state.shoe.totalCards !== state.rules.numDecks * 52;
+      if (shouldReshuffle(state.shoe) || decksChanged) {
         return { ...state, phase: 'intermission' };
       }
       // Re-use the same bet and go straight to deal
       const rebetState: GameState = {
-        ...createInitialState(),
+        ...createInitialState(state.rules),
         shoe: state.shoe,
         chips: state.chips,
         currentBet: state.currentBet,
@@ -385,18 +405,23 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'NEXT_ROUND': {
-      if (shouldReshuffle(state.shoe)) {
+      const decksChanged = state.shoe.totalCards !== state.rules.numDecks * 52;
+      if (shouldReshuffle(state.shoe) || decksChanged) {
         return { ...state, phase: 'intermission' };
       }
       const chips = state.chips <= 0 ? STARTING_CHIPS : state.chips;
       saveChips(chips);
       return {
-        ...createInitialState(),
+        ...createInitialState(state.rules),
         shoe: state.shoe,
         chips,
         currentBet: state.currentBet,
         shoeStats: state.shoeStats,
       };
+    }
+
+    case 'APPLY_RULES': {
+      return { ...state, rules: action.rules };
     }
 
     case 'RELOAD_CHIPS': {
@@ -460,7 +485,7 @@ function runDealerPhase(
   hands: HandState[],
   feedback: GameState['lastStrategyFeedback']
 ): GameState {
-  const { finalCards, shoe } = playDealerHand(state.shoe, state.dealerCards);
+  const { finalCards, shoe } = playDealerHand(state.shoe, state.dealerCards, state.rules.dealerStandsOnSoft17);
   const { total: dealerTotal, isBust: dealerBust } = evaluateHand(finalCards);
 
   let chips = state.chips;
@@ -501,7 +526,29 @@ interface GameContextValue {
 export const GameContext = createContext<GameContextValue | null>(null);
 
 export function GameStoreProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(gameReducer, undefined, createInitialState);
+  const { settings } = useSettings();
+  const initialRules: ActiveRules = {
+    numDecks: settings.numDecks,
+    dealerStandsOnSoft17: settings.dealerStandsOnSoft17,
+    surrenderAllowed: settings.surrenderAllowed,
+    doubleAfterSplit: settings.doubleAfterSplit,
+  };
+  const [state, dispatch] = useReducer(gameReducer, initialRules, createInitialState);
+
+  // Sync settings → rules. Mid-hand changes apply on the next round (REBET / NEXT_ROUND
+  // detect deck-count changes and trigger an intermission to reshuffle).
+  useEffect(() => {
+    dispatch({
+      type: 'APPLY_RULES',
+      rules: {
+        numDecks: settings.numDecks,
+        dealerStandsOnSoft17: settings.dealerStandsOnSoft17,
+        surrenderAllowed: settings.surrenderAllowed,
+        doubleAfterSplit: settings.doubleAfterSplit,
+      },
+    });
+  }, [settings.numDecks, settings.dealerStandsOnSoft17, settings.surrenderAllowed, settings.doubleAfterSplit]);
+
   return React.createElement(GameContext.Provider, { value: { state, dispatch } }, children);
 }
 

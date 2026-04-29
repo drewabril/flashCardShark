@@ -25,7 +25,11 @@ export function PlayingCard({ card }: Props) {
 
 export function CardBack() {
   return (
-    <div className={styles.card} style={{ background: 'linear-gradient(135deg, #1565c0 25%, #0d47a1 100%)' }} aria-label="Face down card">
+    <div
+      className={styles.card}
+      style={{ background: 'var(--card-back, linear-gradient(135deg, #1565c0 25%, #0d47a1 100%))' }}
+      aria-label="Face down card"
+    >
       <div style={{ gridColumn: '1', gridRow: '1 / 4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: 'rgba(255,255,255,0.25)' }}>
         🂠
       </div>
