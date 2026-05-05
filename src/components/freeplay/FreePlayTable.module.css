@@ -97,3 +97,32 @@
   cursor: pointer;
   margin-top: 6px;
 }
+
+/* Felt tool bar: chart button + count overlay */
+.feltTools {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.chartBtn {
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.chartBtn:hover {
+  background: rgba(255, 213, 79, 0.15);
+  color: #ffd54f;
+  border-color: rgba(255, 213, 79, 0.4);
+}

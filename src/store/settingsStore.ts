@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cardBackStyle: 'blue',
   feltColor: 'green',
   feedbackMode: 'always',
+  countingMode: false,
 };
 
 function loadSettings(): Settings {

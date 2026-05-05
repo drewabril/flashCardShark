@@ -9,12 +9,12 @@ type DealerMap = Record<number, StrategyAction>;
 
 // Late surrender: only on first action of an unsplit hand (2 cards)
 // Hard 16 vs 9, 10, A | Hard 15 vs 10
-const SURRENDER_HARD: Record<number, Record<number, true>> = {
+export const SURRENDER_HARD: Record<number, Record<number, true>> = {
   15: { 10: true },
   16: { 9: true, 10: true, 11: true },
 };
 
-const HARD: Record<number, DealerMap> = {
+export const HARD: Record<number, DealerMap> = {
    5: { 2:'H', 3:'H', 4:'H', 5:'H', 6:'H', 7:'H', 8:'H', 9:'H', 10:'H', 11:'H' },
    6: { 2:'H', 3:'H', 4:'H', 5:'H', 6:'H', 7:'H', 8:'H', 9:'H', 10:'H', 11:'H' },
    7: { 2:'H', 3:'H', 4:'H', 5:'H', 6:'H', 7:'H', 8:'H', 9:'H', 10:'H', 11:'H' },
@@ -30,7 +30,7 @@ const HARD: Record<number, DealerMap> = {
   17: { 2:'S', 3:'S', 4:'S', 5:'S', 6:'S', 7:'S', 8:'S', 9:'S', 10:'S', 11:'S' },
 };
 
-const SOFT: Record<number, DealerMap> = {
+export const SOFT: Record<number, DealerMap> = {
   13: { 2:'H', 3:'H', 4:'H', 5:'D', 6:'D', 7:'H', 8:'H', 9:'H', 10:'H', 11:'H' }, // A2
   14: { 2:'H', 3:'H', 4:'H', 5:'D', 6:'D', 7:'H', 8:'H', 9:'H', 10:'H', 11:'H' }, // A3
   15: { 2:'H', 3:'H', 4:'D', 5:'D', 6:'D', 7:'H', 8:'H', 9:'H', 10:'H', 11:'H' }, // A4
@@ -41,7 +41,7 @@ const SOFT: Record<number, DealerMap> = {
   20: { 2:'S', 3:'S', 4:'S', 5:'S', 6:'S', 7:'S', 8:'S', 9:'S', 10:'S', 11:'S' }, // A9
 };
 
-const PAIRS: Record<Rank, DealerMap> = {
+export const PAIRS: Record<Rank, DealerMap> = {
   'A': { 2:'SP', 3:'SP', 4:'SP', 5:'SP', 6:'SP', 7:'SP', 8:'SP', 9:'SP', 10:'SP', 11:'SP' },
   '2': { 2:'SP', 3:'SP', 4:'SP', 5:'SP', 6:'SP', 7:'SP', 8:'H',  9:'H',  10:'H',  11:'H'  },
   '3': { 2:'SP', 3:'SP', 4:'SP', 5:'SP', 6:'SP', 7:'SP', 8:'H',  9:'H',  10:'H',  11:'H'  },

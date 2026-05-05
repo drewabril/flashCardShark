@@ -67,6 +67,8 @@ export interface GameState {
   lastStrategyFeedback: StrategyFeedback | null;
   shoeStats: ShoeStats;
   rules: ActiveRules;
+  /** Hi-Lo running count for the current shoe. Resets on reshuffle. */
+  runningCount: number;
 }
 
 export type GameAction =
@@ -125,6 +127,8 @@ export interface Settings {
   feltColor: FeltColor;
   // Feedback
   feedbackMode: FeedbackMode;
+  // Training tools
+  countingMode: boolean; // show Hi-Lo running/true count overlay
 }
 
 // ─── Stats ─────────────────────────────────────────────────────────────────

@@ -135,6 +135,20 @@ export function SettingsModal({ onClose }: Props) {
             </Row>
           </section>
 
+          {/* Training Tools */}
+          <section className={styles.section}>
+            <h3>Training Tools</h3>
+            <Toggle
+              label="Hi-Lo count overlay"
+              checked={settings.countingMode}
+              onChange={v => updateSettings({ countingMode: v })}
+            />
+            <p className={styles.note}>
+              Displays the running count, true count, and decks remaining during Free Play.
+              Counts all face-up cards using the Hi-Lo system (2–6 = +1, 7–9 = 0, 10–A = −1).
+            </p>
+          </section>
+
           <button className={styles.resetBtn} onClick={resetSettings}>Reset to defaults</button>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { evaluateHand, canDouble, canSplit } from '../engine/hand';
 import { playDealerHand } from '../engine/dealer';
 import { getBasicStrategyMove, getExplanation, classifyHand, cardsToSituation } from '../engine/basicStrategy';
 import { rankToNumber } from '../engine/cards';
+import { countCards } from '../engine/counting';
 import { useSettings } from './settingsStore';
 
 const STARTING_CHIPS = 1000;
@@ -74,6 +75,7 @@ export function createInitialState(rules: ActiveRules = DEFAULT_RULES): GameStat
     lastStrategyFeedback: null,
     shoeStats: { handsPlayed: 0, startingChips: chips },
     rules,
+    runningCount: 0,
   };
 }
 
@@ -106,6 +108,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const chips = state.chips - state.currentBet;
       saveChips(chips);
 
+      // Count the 3 face-up cards dealt to player + dealer upcard
+      const dealCount = countCards([draws[0].card, draws[2].card, draws[1].card]);
+
       // Check for player blackjack immediately
       const { isBlackjack } = evaluateHand(playerCards);
       if (isBlackjack) {
@@ -116,6 +121,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         const payout = calcPayout(result, state.currentBet);
         const finalChips = chips + payout;
         saveChips(finalChips);
+        // Count the hole card too since it's now revealed
+        const bjCount = dealCount + countCards([dealerHoleResult.card]);
         return {
           ...state,
           shoe: s,
@@ -126,6 +133,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           chips: finalChips,
           lastStrategyFeedback: null,
           shoeStats: { ...state.shoeStats, handsPlayed: state.shoeStats.handsPlayed + 1 },
+          runningCount: state.runningCount + bjCount,
         };
       }
 
@@ -142,6 +150,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         chips,
         insuranceBet: 0,
         lastStrategyFeedback: null,
+        runningCount: state.runningCount + dealCount,
       };
     }
 
@@ -176,13 +185,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         result: isBust ? 'lose' : null,
       };
       const updatedHands = state.playerHands.map((h, i) => i === handIdx ? updatedHand : h);
+      const hitCount = state.runningCount + countCards([card]);
 
       if (isBust) {
         // Move to next split hand or dealer turn
-        return advanceAfterBust(state, updatedHands, handIdx, shoe, feedback, total);
+        return advanceAfterBust({ ...state, runningCount: hitCount }, updatedHands, handIdx, shoe, feedback, total);
       }
 
-      return { ...state, shoe, playerHands: updatedHands, lastStrategyFeedback: feedback };
+      return { ...state, shoe, playerHands: updatedHands, lastStrategyFeedback: feedback, runningCount: hitCount };
     }
 
     case 'STAND': {
@@ -248,13 +258,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         result: isBust ? 'lose' : null,
       };
       const updatedHands = state.playerHands.map((h, i) => i === handIdx ? updatedHand : h);
+      const doubleCount = state.runningCount + countCards([card]);
 
       // After double, always move to dealer turn for this hand
       const nextHandIdx = handIdx + 1;
       if (!isBust && nextHandIdx < updatedHands.length) {
-        return { ...state, shoe, chips, playerHands: updatedHands, activeHandIndex: nextHandIdx, phase: 'splitTurn', lastStrategyFeedback: feedback };
+        return { ...state, shoe, chips, playerHands: updatedHands, activeHandIndex: nextHandIdx, phase: 'splitTurn', lastStrategyFeedback: feedback, runningCount: doubleCount };
       }
-      return runDealerPhase({ ...state, shoe, chips }, updatedHands, feedback);
+      return runDealerPhase({ ...state, shoe, chips, runningCount: doubleCount }, updatedHands, feedback);
     }
 
     case 'SPLIT': {
@@ -311,6 +322,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         activeHandIndex: handIdx,
         phase: 'splitTurn',
         lastStrategyFeedback: feedback,
+        runningCount: state.runningCount + countCards([draw1.card, draw2.card]),
       };
     }
 
@@ -374,6 +386,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       // Reveal dealer hole card so the result screen shows what would have been
       const revealedDealer = state.dealerCards.map(c => ({ ...c, faceDown: false }));
+      // Count the hole card now that it's revealed
+      const holeCard = state.dealerCards.find(c => c.faceDown);
 
       return {
         ...state,
@@ -383,6 +397,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         phase: 'roundOver',
         lastStrategyFeedback: feedback,
         shoeStats: { ...state.shoeStats, handsPlayed: state.shoeStats.handsPlayed + 1 },
+        runningCount: state.runningCount + (holeCard ? countCards([holeCard]) : 0),
       };
     }
 
@@ -451,6 +466,8 @@ function resolveInsurance(state: GameState): GameState {
       canSplit: false,
       canSurrender: false,
     };
+    // Count hole card (index 1) — upcard (index 0) was already counted at DEAL
+    const holeCard = state.dealerCards[1];
     return {
       ...state,
       chips: finalChips,
@@ -458,6 +475,7 @@ function resolveInsurance(state: GameState): GameState {
       playerHands: [updatedHand],
       phase: 'roundOver',
       shoeStats: { ...state.shoeStats, handsPlayed: state.shoeStats.handsPlayed + 1 },
+      runningCount: state.runningCount + (holeCard ? countCards([holeCard]) : 0),
     };
   }
 
@@ -488,6 +506,11 @@ function runDealerPhase(
   const { finalCards, shoe } = playDealerHand(state.shoe, state.dealerCards, state.rules.dealerStandsOnSoft17);
   const { total: dealerTotal, isBust: dealerBust } = evaluateHand(finalCards);
 
+  // Count all dealer cards that weren't counted yet:
+  // index 0 (upcard) was counted at DEAL; everything else (hole card + new draws) is new.
+  const newDealerCards = finalCards.slice(1);
+  const dealerPhaseCount = state.runningCount + countCards(newDealerCards);
+
   let chips = state.chips;
   const resolvedHands = hands.map(hand => {
     if (hand.result === 'lose') {
@@ -511,6 +534,7 @@ function runDealerPhase(
     chips,
     lastStrategyFeedback: feedback,
     shoeStats: { ...state.shoeStats, handsPlayed: state.shoeStats.handsPlayed + 1 },
+    runningCount: dealerPhaseCount,
   };
 }
 

@@ -10,6 +10,8 @@ import { BetControls } from '../controls/BetControls';
 import { StrategyFeedback } from '../feedback/StrategyFeedback';
 import { InsurancePrompt } from './InsurancePrompt';
 import { IntermissionScreen } from './IntermissionScreen';
+import { CountOverlay } from './CountOverlay';
+import { StrategyChartModal } from '../strategy/StrategyChartModal';
 import styles from './FreePlayTable.module.css';
 
 const RESULT_LABEL: Record<string, string> = {
@@ -75,6 +77,7 @@ export function FreePlayTable() {
 
   const [showFeedback, setShowFeedback] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [showChart, setShowChart] = useState(false);
 
   // When feedback is set from an action that ends the player turn, show it then auto-continue
   const handleAction = (action: () => void) => {
@@ -101,6 +104,24 @@ export function FreePlayTable() {
 
   return (
     <div className={styles.table}>
+      {/* Felt tools: chart button + count overlay */}
+      <div className={styles.feltTools}>
+        <button
+          className={styles.chartBtn}
+          onClick={() => setShowChart(true)}
+          title="Open strategy chart"
+          aria-label="Strategy chart"
+        >
+          📋 Chart
+        </button>
+        {settings.countingMode && (
+          <CountOverlay
+            runningCount={state.runningCount}
+            cardsRemaining={state.shoe.cards.length}
+          />
+        )}
+      </div>
+
       {/* Dealer */}
       <div className={styles.dealerArea}>
         {dealerCards.length > 0 && (
@@ -226,6 +247,9 @@ export function FreePlayTable() {
           onResetStats={resetStats}
         />
       )}
+
+      {/* Strategy chart modal — can be opened any time without affecting game state */}
+      {showChart && <StrategyChartModal onClose={() => setShowChart(false)} />}
     </div>
   );
 }
