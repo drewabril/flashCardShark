@@ -5,14 +5,14 @@ import type { Settings } from '../types';
 const STORAGE_KEY = 'fcs_settings';
 
 export const DEFAULT_SETTINGS: Settings = {
-  numDecks: 6,
+  numDecks: 4,
   dealerStandsOnSoft17: true,
-  surrenderAllowed: true,
+  surrenderAllowed: false,
   doubleAfterSplit: true,
-  cardBackStyle: 'blue',
-  feltColor: 'green',
-  feedbackMode: 'always',
-  countingMode: false,
+  cardBackStyle: 'gray',
+  feltColor: 'blue',
+  feedbackMode: 'mistakeOnly',
+  countingMode: true,
 };
 
 function loadSettings(): Settings {
