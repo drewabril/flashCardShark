@@ -50,3 +50,76 @@
 }
 
 .nextBtn:hover { opacity: 0.88; }
+
+.modeBar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  background: rgba(255,255,255,0.05);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.modeBtn {
+  padding: 7px 16px;
+  background: transparent;
+  color: rgba(255,255,255,0.6);
+  border: none;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.modeBtn:hover:not(:disabled):not(.modeActive) {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+
+.modeBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.modeActive {
+  background: #ffd54f;
+  color: #1a1a1a;
+}
+
+.clearBtn {
+  padding: 4px 10px;
+  background: transparent;
+  color: rgba(255,255,255,0.4);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  margin-left: 4px;
+}
+
+.clearBtn:hover {
+  color: rgba(255,255,255,0.85);
+  border-color: rgba(255,255,255,0.4);
+}
+
+.empty {
+  padding: 40px 24px;
+  text-align: center;
+  background: rgba(255,255,255,0.04);
+  border-radius: 12px;
+  max-width: 420px;
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffd54f;
+  margin-bottom: 8px;
+}
+
+.emptyBody {
+  font-size: 13px;
+  color: rgba(255,255,255,0.65);
+  line-height: 1.6;
+}

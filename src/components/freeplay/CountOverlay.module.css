@@ -1,0 +1,64 @@
+.overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 8px 16px;
+  backdrop-filter: blur(4px);
+}
+
+.label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.statLabel {
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.statValue {
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1;
+}
+
+.divider {
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 16px;
+  align-self: center;
+}
+
+.hint {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Count sentiment colours */
+.positive { color: #66bb6a; }
+.negative { color: #ef5350; }
+.neutral  { color: rgba(255, 255, 255, 0.75); }

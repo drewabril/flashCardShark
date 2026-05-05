@@ -1,13 +1,20 @@
-import type { Card, Rank, StrategyAction, HandCategory } from '../types';
+import type { Card, Rank, StrategyAction, HandCategory, MistakeSituation } from '../types';
 import { rankToNumber } from './cards';
 import { evaluateHand, canDouble as handCanDouble } from './hand';
 
-// 6-deck, dealer stands soft 17, double after split allowed
+// 6-deck, dealer stands soft 17, double after split allowed, late surrender allowed
 // Dealer upcard index: 2–10, 11=Ace
 
 type DealerMap = Record<number, StrategyAction>;
 
-const HARD: Record<number, DealerMap> = {
+// Late surrender: only on first action of an unsplit hand (2 cards)
+// Hard 16 vs 9, 10, A | Hard 15 vs 10
+export const SURRENDER_HARD: Record<number, Record<number, true>> = {
+  15: { 10: true },
+  16: { 9: true, 10: true, 11: true },
+};
+
+export const HARD: Record<number, DealerMap> = {
    5: { 2:'H', 3:'H', 4:'H', 5:'H', 6:'H', 7:'H', 8:'H', 9:'H', 10:'H', 11:'H' },
    6: { 2:'H', 3:'H', 4:'H', 5:'H', 6:'H', 7:'H', 8:'H', 9:'H', 10:'H', 11:'H' },
    7: { 2:'H', 3:'H', 4:'H', 5:'H', 6:'H', 7:'H', 8:'H', 9:'H', 10:'H', 11:'H' },
@@ -23,7 +30,7 @@ const HARD: Record<number, DealerMap> = {
   17: { 2:'S', 3:'S', 4:'S', 5:'S', 6:'S', 7:'S', 8:'S', 9:'S', 10:'S', 11:'S' },
 };
 
-const SOFT: Record<number, DealerMap> = {
+export const SOFT: Record<number, DealerMap> = {
   13: { 2:'H', 3:'H', 4:'H', 5:'D', 6:'D', 7:'H', 8:'H', 9:'H', 10:'H', 11:'H' }, // A2
   14: { 2:'H', 3:'H', 4:'H', 5:'D', 6:'D', 7:'H', 8:'H', 9:'H', 10:'H', 11:'H' }, // A3
   15: { 2:'H', 3:'H', 4:'D', 5:'D', 6:'D', 7:'H', 8:'H', 9:'H', 10:'H', 11:'H' }, // A4
@@ -34,7 +41,7 @@ const SOFT: Record<number, DealerMap> = {
   20: { 2:'S', 3:'S', 4:'S', 5:'S', 6:'S', 7:'S', 8:'S', 9:'S', 10:'S', 11:'S' }, // A9
 };
 
-const PAIRS: Record<Rank, DealerMap> = {
+export const PAIRS: Record<Rank, DealerMap> = {
   'A': { 2:'SP', 3:'SP', 4:'SP', 5:'SP', 6:'SP', 7:'SP', 8:'SP', 9:'SP', 10:'SP', 11:'SP' },
   '2': { 2:'SP', 3:'SP', 4:'SP', 5:'SP', 6:'SP', 7:'SP', 8:'H',  9:'H',  10:'H',  11:'H'  },
   '3': { 2:'SP', 3:'SP', 4:'SP', 5:'SP', 6:'SP', 7:'SP', 8:'H',  9:'H',  10:'H',  11:'H'  },
@@ -50,6 +57,34 @@ const PAIRS: Record<Rank, DealerMap> = {
   'K': { 2:'S',  3:'S',  4:'S',  5:'S',  6:'S',  7:'S',  8:'S',  9:'S',  10:'S',  11:'S'  },
 };
 
+/**
+ * Reduce a hand + dealer upcard to a canonical situation used by the mistake tracker.
+ * Pairs key on the rank, soft hands key on the soft total, hard on the hard total.
+ * The dealer rank stores the upcard (face cards normalized to '10').
+ */
+export function cardsToSituation(playerCards: Card[], dealerUpcard: Card): MistakeSituation {
+  const { total, isPair, isSoft } = evaluateHand(playerCards);
+  // Normalize face cards to '10' so J/Q/K all share a row
+  const r = dealerUpcard.rank;
+  const dealerRank: Rank = (r === 'J' || r === 'Q' || r === 'K') ? '10' : r;
+
+  if (isPair && playerCards.length === 2) {
+    return {
+      category: 'pair',
+      totalOrRank: playerCards[0].rank === 'J' || playerCards[0].rank === 'Q' || playerCards[0].rank === 'K'
+        ? '10'
+        : playerCards[0].rank,
+      dealerRank,
+    };
+  }
+  if (isSoft) return { category: 'soft', totalOrRank: String(total), dealerRank };
+  return { category: 'hard', totalOrRank: String(total), dealerRank };
+}
+
+export function situationKey(s: MistakeSituation): string {
+  return `${s.category}:${s.totalOrRank}:${s.dealerRank}`;
+}
+
 export function classifyHand(cards: Card[]): HandCategory {
   const { isPair, isSoft } = evaluateHand(cards);
   if (isPair && cards.length === 2) return 'pair';
@@ -60,11 +95,17 @@ export function classifyHand(cards: Card[]): HandCategory {
 export function getBasicStrategyMove(
   playerCards: Card[],
   dealerUpcard: Card,
-  playerCanDouble = true
+  playerCanDouble = true,
+  playerCanSurrender = false
 ): StrategyAction {
   const { total, isPair, isSoft } = evaluateHand(playerCards);
   const dealerNum = rankToNumber(dealerUpcard.rank);
   const doubleAllowed = playerCanDouble && handCanDouble(playerCards);
+
+  // Surrender takes priority on hard totals when allowed (2-card unsplit hand)
+  if (playerCanSurrender && !isPair && !isSoft && SURRENDER_HARD[total]?.[dealerNum]) {
+    return 'SR';
+  }
 
   let action: StrategyAction;
 
@@ -99,8 +140,13 @@ export function getExplanation(
     S: 'Stand',
     D: 'Double Down',
     SP: 'Split',
+    SR: 'Surrender',
   };
   const act = actionLabel[correctAction];
+
+  if (correctAction === 'SR') {
+    return `${act}: Hard ${total} vs dealer ${dealerLabel} — surrender saves half your bet vs near-certain loss.`;
+  }
 
   if (category === 'pair') {
     if (correctAction === 'SP') return `${act}: Always split this pair against dealer ${dealerLabel}.`;

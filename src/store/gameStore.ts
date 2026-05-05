@@ -1,12 +1,21 @@
-import { createContext, useContext, useReducer } from 'react';
-import type { GameState, GameAction, HandState, RoundResult } from '../types';
+import { createContext, useContext, useEffect, useReducer } from 'react';
+import type { GameState, GameAction, HandState, RoundResult, ActiveRules } from '../types';
 import { createShoe, drawCard, shouldReshuffle } from '../engine/deck';
 import { evaluateHand, canDouble, canSplit } from '../engine/hand';
 import { playDealerHand } from '../engine/dealer';
-import { getBasicStrategyMove, getExplanation, classifyHand } from '../engine/basicStrategy';
+import { getBasicStrategyMove, getExplanation, classifyHand, cardsToSituation } from '../engine/basicStrategy';
 import { rankToNumber } from '../engine/cards';
+import { countCards } from '../engine/counting';
+import { useSettings } from './settingsStore';
 
 const STARTING_CHIPS = 1000;
+
+const DEFAULT_RULES: ActiveRules = {
+  numDecks: 6,
+  dealerStandsOnSoft17: true,
+  surrenderAllowed: true,
+  doubleAfterSplit: true,
+};
 
 function loadChips(): number {
   try {
@@ -25,13 +34,14 @@ function saveChips(chips: number): void {
   }
 }
 
-function makeHandState(cards: HandState['cards'], bet: number): HandState {
+function makeHandState(cards: HandState['cards'], bet: number, canSurrender = false): HandState {
   return {
     cards,
     bet,
     result: null,
     canDouble: canDouble(cards),
     canSplit: canSplit(cards),
+    canSurrender,
   };
 }
 
@@ -51,16 +61,21 @@ function calcPayout(result: RoundResult, bet: number): number {
   return 0;
 }
 
-export function createInitialState(): GameState {
+export function createInitialState(rules: ActiveRules = DEFAULT_RULES): GameState {
+  const chips = loadChips();
   return {
-    shoe: createShoe(),
+    shoe: createShoe(rules.numDecks),
     playerHands: [],
     activeHandIndex: 0,
     dealerCards: [],
     phase: 'betting',
-    chips: loadChips(),
+    chips,
     currentBet: 0,
+    insuranceBet: 0,
     lastStrategyFeedback: null,
+    shoeStats: { handsPlayed: 0, startingChips: chips },
+    rules,
+    runningCount: 0,
   };
 }
 
@@ -74,11 +89,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'DEAL': {
       if (state.currentBet <= 0) return state;
-      let shoe = shouldReshuffle(state.shoe) ? createShoe() : state.shoe;
 
       // Draw: p1, d1, p2, d2 (dealer second card face down)
       const draws: Array<{ card: ReturnType<typeof drawCard>['card']; shoe: ReturnType<typeof drawCard>['shoe'] }> = [];
-      let s = shoe;
+      let s = state.shoe;
       for (let i = 0; i < 3; i++) {
         const r = drawCard(s);
         draws.push(r);
@@ -90,9 +104,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const playerCards = [draws[0].card, draws[2].card];
       const dealerCards = [draws[1].card, dealerHoleResult.card];
 
-      const hand = makeHandState(playerCards, state.currentBet);
+      const hand = makeHandState(playerCards, state.currentBet, state.rules.surrenderAllowed);
       const chips = state.chips - state.currentBet;
       saveChips(chips);
+
+      // Count the 3 face-up cards dealt to player + dealer upcard
+      const dealCount = countCards([draws[0].card, draws[2].card, draws[1].card]);
 
       // Check for player blackjack immediately
       const { isBlackjack } = evaluateHand(playerCards);
@@ -104,17 +121,24 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         const payout = calcPayout(result, state.currentBet);
         const finalChips = chips + payout;
         saveChips(finalChips);
+        // Count the hole card too since it's now revealed
+        const bjCount = dealCount + countCards([dealerHoleResult.card]);
         return {
           ...state,
           shoe: s,
-          playerHands: [{ ...hand, result, canDouble: false, canSplit: false }],
+          playerHands: [{ ...hand, result, canDouble: false, canSplit: false, canSurrender: false }],
           dealerCards: revealedDealer,
           activeHandIndex: 0,
           phase: 'roundOver',
           chips: finalChips,
           lastStrategyFeedback: null,
+          shoeStats: { ...state.shoeStats, handsPlayed: state.shoeStats.handsPlayed + 1 },
+          runningCount: state.runningCount + bjCount,
         };
       }
+
+      // Offer insurance if dealer upcard is Ace (and player doesn't have BJ — handled above)
+      const insuranceOffered = dealerCards[0].rank === 'A';
 
       return {
         ...state,
@@ -122,9 +146,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         playerHands: [hand],
         dealerCards,
         activeHandIndex: 0,
-        phase: 'playerTurn',
+        phase: insuranceOffered ? 'insuranceOffered' : 'playerTurn',
         chips,
+        insuranceBet: 0,
         lastStrategyFeedback: null,
+        runningCount: state.runningCount + dealCount,
       };
     }
 
@@ -135,7 +161,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const dealerUpcard = state.dealerCards[0];
 
       // Capture strategy feedback before drawing
-      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble);
+      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble, hand.canSurrender);
       const category = classifyHand(hand.cards);
       const { total: t } = evaluateHand(hand.cards);
       const feedback = {
@@ -144,6 +170,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         isCorrect: correctAction === 'H',
         explanation: getExplanation(correctAction, category, t, rankToNumber(dealerUpcard.rank)),
         handCategory: category,
+        situation: cardsToSituation(hand.cards, dealerUpcard),
       };
 
       const { card, shoe } = drawCard(state.shoe);
@@ -154,16 +181,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         cards: newCards,
         canDouble: false,
         canSplit: false,
+        canSurrender: false,
         result: isBust ? 'lose' : null,
       };
       const updatedHands = state.playerHands.map((h, i) => i === handIdx ? updatedHand : h);
+      const hitCount = state.runningCount + countCards([card]);
 
       if (isBust) {
         // Move to next split hand or dealer turn
-        return advanceAfterBust(state, updatedHands, handIdx, shoe, feedback, total);
+        return advanceAfterBust({ ...state, runningCount: hitCount }, updatedHands, handIdx, shoe, feedback, total);
       }
 
-      return { ...state, shoe, playerHands: updatedHands, lastStrategyFeedback: feedback };
+      return { ...state, shoe, playerHands: updatedHands, lastStrategyFeedback: feedback, runningCount: hitCount };
     }
 
     case 'STAND': {
@@ -172,7 +201,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const hand = state.playerHands[handIdx];
       const dealerUpcard = state.dealerCards[0];
 
-      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble);
+      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble, hand.canSurrender);
       const category = classifyHand(hand.cards);
       const { total } = evaluateHand(hand.cards);
       const feedback = {
@@ -181,6 +210,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         isCorrect: correctAction === 'S',
         explanation: getExplanation(correctAction, category, total, rankToNumber(dealerUpcard.rank)),
         handCategory: category,
+        situation: cardsToSituation(hand.cards, dealerUpcard),
       };
 
       const nextHandIdx = handIdx + 1;
@@ -198,7 +228,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!hand.canDouble) return state;
       const dealerUpcard = state.dealerCards[0];
 
-      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, true);
+      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, true, hand.canSurrender);
       const category = classifyHand(hand.cards);
       const { total } = evaluateHand(hand.cards);
       const feedback = {
@@ -207,6 +237,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         isCorrect: correctAction === 'D',
         explanation: getExplanation(correctAction, category, total, rankToNumber(dealerUpcard.rank)),
         handCategory: category,
+        situation: cardsToSituation(hand.cards, dealerUpcard),
       };
 
       // Deduct extra bet
@@ -223,16 +254,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         bet: hand.bet + extraBet,
         canDouble: false,
         canSplit: false,
+        canSurrender: false,
         result: isBust ? 'lose' : null,
       };
       const updatedHands = state.playerHands.map((h, i) => i === handIdx ? updatedHand : h);
+      const doubleCount = state.runningCount + countCards([card]);
 
       // After double, always move to dealer turn for this hand
       const nextHandIdx = handIdx + 1;
       if (!isBust && nextHandIdx < updatedHands.length) {
-        return { ...state, shoe, chips, playerHands: updatedHands, activeHandIndex: nextHandIdx, phase: 'splitTurn', lastStrategyFeedback: feedback };
+        return { ...state, shoe, chips, playerHands: updatedHands, activeHandIndex: nextHandIdx, phase: 'splitTurn', lastStrategyFeedback: feedback, runningCount: doubleCount };
       }
-      return runDealerPhase({ ...state, shoe, chips }, updatedHands, feedback);
+      return runDealerPhase({ ...state, shoe, chips, runningCount: doubleCount }, updatedHands, feedback);
     }
 
     case 'SPLIT': {
@@ -242,7 +275,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!hand.canSplit) return state;
       const dealerUpcard = state.dealerCards[0];
 
-      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble);
+      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble, hand.canSurrender);
       const category = classifyHand(hand.cards);
       const { total } = evaluateHand(hand.cards);
       const feedback = {
@@ -251,6 +284,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         isCorrect: correctAction === 'SP',
         explanation: getExplanation(correctAction, category, total, rankToNumber(dealerUpcard.rank)),
         handCategory: category,
+        situation: cardsToSituation(hand.cards, dealerUpcard),
       };
 
       // Deduct second bet
@@ -267,6 +301,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const hand1 = makeHandState(hand1Cards, hand.bet);
       const hand2 = makeHandState(hand2Cards, splitBet);
+      // Apply DAS rule: if double-after-split is disabled, both hands cannot double
+      if (!state.rules.doubleAfterSplit) {
+        hand1.canDouble = false;
+        hand2.canDouble = false;
+      }
 
       const newHands = [
         ...state.playerHands.slice(0, handIdx),
@@ -283,31 +322,121 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         activeHandIndex: handIdx,
         phase: 'splitTurn',
         lastStrategyFeedback: feedback,
+        runningCount: state.runningCount + countCards([draw1.card, draw2.card]),
+      };
+    }
+
+    case 'TAKE_INSURANCE': {
+      if (state.phase !== 'insuranceOffered') return state;
+      const insuranceBet = Math.floor(state.currentBet / 2);
+      if (insuranceBet > state.chips) return resolveInsurance(state); // can't afford → treat as decline
+      const chips = state.chips - insuranceBet;
+      saveChips(chips);
+      return resolveInsurance({ ...state, chips, insuranceBet });
+    }
+
+    case 'DECLINE_INSURANCE': {
+      if (state.phase !== 'insuranceOffered') return state;
+      return resolveInsurance({ ...state, insuranceBet: 0 });
+    }
+
+    case 'END_INTERMISSION': {
+      if (state.phase !== 'intermission') return state;
+      const chips = state.chips <= 0 ? STARTING_CHIPS : state.chips;
+      saveChips(chips);
+      return {
+        ...createInitialState(state.rules),
+        chips,
+        currentBet: state.currentBet,
+        shoeStats: { handsPlayed: 0, startingChips: chips },
+      };
+    }
+
+    case 'SURRENDER': {
+      if (state.phase !== 'playerTurn') return state;
+      const handIdx = state.activeHandIndex;
+      const hand = state.playerHands[handIdx];
+      if (!hand.canSurrender) return state;
+      const dealerUpcard = state.dealerCards[0];
+
+      const correctAction = getBasicStrategyMove(hand.cards, dealerUpcard, hand.canDouble, true);
+      const category = classifyHand(hand.cards);
+      const { total } = evaluateHand(hand.cards);
+      const feedback = {
+        playerAction: 'SR' as const,
+        correctAction,
+        isCorrect: correctAction === 'SR',
+        explanation: getExplanation(correctAction, category, total, rankToNumber(dealerUpcard.rank)),
+        handCategory: category,
+        situation: cardsToSituation(hand.cards, dealerUpcard),
+      };
+
+      // Return half the bet, end the round (no dealer play needed for single surrendered hand)
+      const refund = Math.floor(hand.bet / 2);
+      const chips = state.chips + refund;
+      saveChips(chips);
+
+      const updatedHand: HandState = {
+        ...hand,
+        canDouble: false,
+        canSplit: false,
+        canSurrender: false,
+        result: 'surrender',
+      };
+
+      // Reveal dealer hole card so the result screen shows what would have been
+      const revealedDealer = state.dealerCards.map(c => ({ ...c, faceDown: false }));
+      // Count the hole card now that it's revealed
+      const holeCard = state.dealerCards.find(c => c.faceDown);
+
+      return {
+        ...state,
+        chips,
+        playerHands: [updatedHand],
+        dealerCards: revealedDealer,
+        phase: 'roundOver',
+        lastStrategyFeedback: feedback,
+        shoeStats: { ...state.shoeStats, handsPlayed: state.shoeStats.handsPlayed + 1 },
+        runningCount: state.runningCount + (holeCard ? countCards([holeCard]) : 0),
       };
     }
 
     case 'REBET': {
       if (state.currentBet <= 0 || state.chips < state.currentBet) return state;
+      // Force intermission if shoe is depleted or deck count was changed in settings
+      const decksChanged = state.shoe.totalCards !== state.rules.numDecks * 52;
+      if (shouldReshuffle(state.shoe) || decksChanged) {
+        return { ...state, phase: 'intermission' };
+      }
       // Re-use the same bet and go straight to deal
       const rebetState: GameState = {
-        ...createInitialState(),
-        shoe: shouldReshuffle(state.shoe) ? createShoe() : state.shoe,
+        ...createInitialState(state.rules),
+        shoe: state.shoe,
         chips: state.chips,
         currentBet: state.currentBet,
+        shoeStats: state.shoeStats,
       };
       return gameReducer(rebetState, { type: 'DEAL' });
     }
 
     case 'NEXT_ROUND': {
-      const shoe = shouldReshuffle(state.shoe) ? createShoe() : state.shoe;
+      const decksChanged = state.shoe.totalCards !== state.rules.numDecks * 52;
+      if (shouldReshuffle(state.shoe) || decksChanged) {
+        return { ...state, phase: 'intermission' };
+      }
       const chips = state.chips <= 0 ? STARTING_CHIPS : state.chips;
       saveChips(chips);
       return {
-        ...createInitialState(),
-        shoe,
+        ...createInitialState(state.rules),
+        shoe: state.shoe,
         chips,
         currentBet: state.currentBet,
+        shoeStats: state.shoeStats,
       };
+    }
+
+    case 'APPLY_RULES': {
+      return { ...state, rules: action.rules };
     }
 
     case 'RELOAD_CHIPS': {
@@ -318,6 +447,40 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     default:
       return state;
   }
+}
+
+function resolveInsurance(state: GameState): GameState {
+  const revealed = state.dealerCards.map(c => ({ ...c, faceDown: false }));
+  const { isBlackjack: dealerBJ } = evaluateHand(revealed);
+
+  if (dealerBJ) {
+    // Original bet lost; insurance pays 2:1 (3x the side bet returned)
+    const insurancePayout = state.insuranceBet > 0 ? state.insuranceBet * 3 : 0;
+    const finalChips = state.chips + insurancePayout;
+    saveChips(finalChips);
+    const hand = state.playerHands[0];
+    const updatedHand: HandState = {
+      ...hand,
+      result: 'lose',
+      canDouble: false,
+      canSplit: false,
+      canSurrender: false,
+    };
+    // Count hole card (index 1) — upcard (index 0) was already counted at DEAL
+    const holeCard = state.dealerCards[1];
+    return {
+      ...state,
+      chips: finalChips,
+      dealerCards: revealed,
+      playerHands: [updatedHand],
+      phase: 'roundOver',
+      shoeStats: { ...state.shoeStats, handsPlayed: state.shoeStats.handsPlayed + 1 },
+      runningCount: state.runningCount + (holeCard ? countCards([holeCard]) : 0),
+    };
+  }
+
+  // No dealer BJ — keep hole card hidden, continue normal play
+  return { ...state, phase: 'playerTurn' };
 }
 
 function advanceAfterBust(
@@ -340,8 +503,13 @@ function runDealerPhase(
   hands: HandState[],
   feedback: GameState['lastStrategyFeedback']
 ): GameState {
-  const { finalCards, shoe } = playDealerHand(state.shoe, state.dealerCards);
+  const { finalCards, shoe } = playDealerHand(state.shoe, state.dealerCards, state.rules.dealerStandsOnSoft17);
   const { total: dealerTotal, isBust: dealerBust } = evaluateHand(finalCards);
+
+  // Count all dealer cards that weren't counted yet:
+  // index 0 (upcard) was counted at DEAL; everything else (hole card + new draws) is new.
+  const newDealerCards = finalCards.slice(1);
+  const dealerPhaseCount = state.runningCount + countCards(newDealerCards);
 
   let chips = state.chips;
   const resolvedHands = hands.map(hand => {
@@ -365,6 +533,8 @@ function runDealerPhase(
     phase: 'roundOver',
     chips,
     lastStrategyFeedback: feedback,
+    shoeStats: { ...state.shoeStats, handsPlayed: state.shoeStats.handsPlayed + 1 },
+    runningCount: dealerPhaseCount,
   };
 }
 
@@ -380,7 +550,29 @@ interface GameContextValue {
 export const GameContext = createContext<GameContextValue | null>(null);
 
 export function GameStoreProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(gameReducer, undefined, createInitialState);
+  const { settings } = useSettings();
+  const initialRules: ActiveRules = {
+    numDecks: settings.numDecks,
+    dealerStandsOnSoft17: settings.dealerStandsOnSoft17,
+    surrenderAllowed: settings.surrenderAllowed,
+    doubleAfterSplit: settings.doubleAfterSplit,
+  };
+  const [state, dispatch] = useReducer(gameReducer, initialRules, createInitialState);
+
+  // Sync settings → rules. Mid-hand changes apply on the next round (REBET / NEXT_ROUND
+  // detect deck-count changes and trigger an intermission to reshuffle).
+  useEffect(() => {
+    dispatch({
+      type: 'APPLY_RULES',
+      rules: {
+        numDecks: settings.numDecks,
+        dealerStandsOnSoft17: settings.dealerStandsOnSoft17,
+        surrenderAllowed: settings.surrenderAllowed,
+        doubleAfterSplit: settings.doubleAfterSplit,
+      },
+    });
+  }, [settings.numDecks, settings.dealerStandsOnSoft17, settings.surrenderAllowed, settings.doubleAfterSplit]);
+
   return React.createElement(GameContext.Provider, { value: { state, dispatch } }, children);
 }
 

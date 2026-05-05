@@ -27,7 +27,10 @@
   cursor: not-allowed;
 }
 
-.hit    { background: #43a047; color: #fff; }
-.stand  { background: #e53935; color: #fff; }
-.double { background: #fb8c00; color: #fff; }
-.split  { background: #8e24aa; color: #fff; }
+.hit       { background: #43a047; color: #fff; }
+.stand     { background: #e53935; color: #fff; }
+.double    { background: #fb8c00; color: #fff; }
+.split     { background: #8e24aa; color: #fff; }
+.surrender { background: #546e7a; color: #fff; }
+
+.wide { grid-column: 1 / -1; }

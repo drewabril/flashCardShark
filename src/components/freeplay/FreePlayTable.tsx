@@ -1,9 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { HandState } from '../../types';
 import { useGame } from '../../hooks/useGame';
+import { useSettings } from '../../store/settingsStore';
+import { useStats } from '../../store/statsStore';
+import { useMistakes } from '../../store/mistakesStore';
 import { HandDisplay } from '../hand/HandDisplay';
 import { ActionButtons } from '../controls/ActionButtons';
 import { BetControls } from '../controls/BetControls';
 import { StrategyFeedback } from '../feedback/StrategyFeedback';
+import { InsurancePrompt } from './InsurancePrompt';
+import { IntermissionScreen } from './IntermissionScreen';
+import { CountOverlay } from './CountOverlay';
+import { StrategyChartModal } from '../strategy/StrategyChartModal';
 import styles from './FreePlayTable.module.css';
 
 const RESULT_LABEL: Record<string, string> = {
@@ -11,6 +19,7 @@ const RESULT_LABEL: Record<string, string> = {
   lose: 'Dealer Wins',
   push: 'Push',
   blackjack: 'Blackjack! 🃏',
+  surrender: 'Surrendered (½ bet returned)',
 };
 
 const RESULT_CLASS: Record<string, string> = {
@@ -18,14 +27,57 @@ const RESULT_CLASS: Record<string, string> = {
   lose: styles.lose,
   push: styles.push,
   blackjack: styles.blackjack,
+  surrender: styles.lose,
 };
 
 export function FreePlayTable() {
-  const { state, placeBet, deal, hit, stand, double, split, nextRound, rebet, reloadChips } = useGame();
-  const { phase, playerHands, dealerCards, chips, currentBet, lastStrategyFeedback, activeHandIndex } = state;
+  const { state, placeBet, deal, hit, stand, double, split, surrender, takeInsurance, declineInsurance, endIntermission, nextRound, rebet, reloadChips } = useGame();
+  const { settings } = useSettings();
+  const { stats, recordDecision, recordRound, resetStats } = useStats();
+  const { recordDecision: recordMistakeDecision } = useMistakes();
+  const { phase, playerHands, dealerCards, chips, currentBet, lastStrategyFeedback, activeHandIndex, shoeStats } = state;
+
+  // Track each strategy decision (lastStrategyFeedback identity changes per action)
+  const lastFeedbackRef = useRef(lastStrategyFeedback);
+  useEffect(() => {
+    if (lastStrategyFeedback && lastStrategyFeedback !== lastFeedbackRef.current) {
+      recordDecision(lastStrategyFeedback.isCorrect);
+      recordMistakeDecision(
+        lastStrategyFeedback.situation,
+        lastStrategyFeedback.playerAction,
+        lastStrategyFeedback.correctAction,
+      );
+      lastFeedbackRef.current = lastStrategyFeedback;
+    } else if (!lastStrategyFeedback) {
+      lastFeedbackRef.current = null;
+    }
+  }, [lastStrategyFeedback, recordDecision, recordMistakeDecision]);
+
+  // Track round results when entering roundOver
+  const lastRoundIdRef = useRef<HandState[] | null>(null);
+  useEffect(() => {
+    if (phase === 'roundOver' && playerHands !== lastRoundIdRef.current) {
+      for (const hand of playerHands) {
+        if (!hand.result) continue;
+        // chip delta = payout - bet (where payout is what was returned to chips)
+        // simplified: derive from result + bet
+        let delta = 0;
+        if (hand.result === 'win')        delta =  hand.bet;
+        else if (hand.result === 'blackjack') delta = Math.floor(hand.bet * 1.5);
+        else if (hand.result === 'lose')  delta = -hand.bet;
+        else if (hand.result === 'surrender') delta = -Math.ceil(hand.bet / 2);
+        // push: 0
+        recordRound(hand.result, delta);
+      }
+      lastRoundIdRef.current = playerHands;
+    } else if (phase === 'betting') {
+      lastRoundIdRef.current = null;
+    }
+  }, [phase, playerHands, recordRound]);
 
   const [showFeedback, setShowFeedback] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [showChart, setShowChart] = useState(false);
 
   // When feedback is set from an action that ends the player turn, show it then auto-continue
   const handleAction = (action: () => void) => {
@@ -52,6 +104,24 @@ export function FreePlayTable() {
 
   return (
     <div className={styles.table}>
+      {/* Felt tools: chart button + count overlay */}
+      <div className={styles.feltTools}>
+        <button
+          className={styles.chartBtn}
+          onClick={() => setShowChart(true)}
+          title="Open strategy chart"
+          aria-label="Strategy chart"
+        >
+          📋 Chart
+        </button>
+        {settings.countingMode && (
+          <CountOverlay
+            runningCount={state.runningCount}
+            cardsRemaining={state.shoe.cards.length}
+          />
+        )}
+      </div>
+
       {/* Dealer */}
       <div className={styles.dealerArea}>
         {dealerCards.length > 0 && (
@@ -141,19 +211,45 @@ export function FreePlayTable() {
           onStand={() => handleAction(stand)}
           onDouble={() => handleAction(double)}
           onSplit={() => handleAction(split)}
+          onSurrender={() => handleAction(surrender)}
           canDouble={activeHand.canDouble}
           canSplit={activeHand.canSplit}
+          canSurrender={activeHand.canSurrender && phase === 'playerTurn'}
         />
       )}
 
-      {/* Strategy feedback overlay */}
-      {showFeedback && lastStrategyFeedback && (
+      {/* Strategy feedback overlay (suppressed on correct in mistake-only mode) */}
+      {showFeedback && lastStrategyFeedback &&
+       (settings.feedbackMode === 'always' || !lastStrategyFeedback.isCorrect) && (
         <StrategyFeedback
           feedback={lastStrategyFeedback}
           onContinue={handleFeedbackContinue}
           continueLabel={isRoundOver ? 'See Result' : 'Continue'}
         />
       )}
+
+      {/* Insurance prompt */}
+      {phase === 'insuranceOffered' && (
+        <InsurancePrompt
+          bet={currentBet}
+          onTake={takeInsurance}
+          onDecline={declineInsurance}
+        />
+      )}
+
+      {/* Shoe intermission */}
+      {phase === 'intermission' && (
+        <IntermissionScreen
+          handsPlayed={shoeStats.handsPlayed}
+          netChips={chips - shoeStats.startingChips}
+          sessionStats={stats}
+          onContinue={endIntermission}
+          onResetStats={resetStats}
+        />
+      )}
+
+      {/* Strategy chart modal — can be opened any time without affecting game state */}
+      {showChart && <StrategyChartModal onClose={() => setShowChart(false)} />}
     </div>
   );
 }
